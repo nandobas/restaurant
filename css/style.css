@@ -1,0 +1,202 @@
+/* Estilos Globais */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f7f6; /* Um cinza muito claro para o fundo geral */
+    color: #333; /* Cor de texto padrão */
+    line-height: 1.6;
+}
+
+header {
+    background-color: #0D1B2A; /* Azul bem escuro, quase preto */
+    color: #E0E1DD; /* Branco acinzentado para texto no header */
+    padding: 1rem 0;
+    text-align: center;
+    border-bottom: 3px solid #415A77; /* Azul acinzentado para uma borda sutil */
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+nav button {
+    background-color: #415A77; /* Azul acinzentado */
+    color: #E0E1DD;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    margin: 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+}
+
+nav button:hover {
+    background-color: #778DA9; /* Azul acinzentado mais claro */
+}
+
+main {
+    padding: 1rem;
+    max-width: 900px;
+    margin: 20px auto;
+    background-color: #FFFFFF; /* Fundo branco para o conteúdo principal */
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+section h2 {
+    color: #0D1B2A; /* Azul escuro para títulos de seção */
+    border-bottom: 2px solid #415A77;
+    padding-bottom: 0.5rem;
+    margin-top: 0;
+}
+
+/* Estilos do Formulário */
+#orderForm div {
+    margin-bottom: 1rem;
+}
+
+#orderForm label {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #1B263B; /* Azul escuro para labels */
+    font-weight: bold;
+}
+
+#orderForm input[type="text"],
+#orderForm input[type="number"],
+#orderForm textarea {
+    width: calc(100% - 22px); /* Ajuste para padding e borda */
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box; /* Garante que padding não aumente a largura total */
+}
+
+#orderForm textarea {
+    resize: vertical;
+}
+
+#orderForm button[type="submit"] {
+    background-color: #007BFF; /* Azul vibrante para o botão principal */
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: background-color 0.3s ease;
+}
+
+#orderForm button[type="submit"]:hover {
+    background-color: #0056b3; /* Azul mais escuro no hover */
+}
+
+/* Estilos da Lista de Pedidos */
+#orderListContainer ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+#orderListContainer li {
+    background-color: #f9f9f9; /* Fundo levemente cinza para itens da lista */
+    border: 1px solid #e0e0e0;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+#orderListContainer li.attended {
+    background-color: #d4edda; /* Verde claro para pedidos atendidos */
+    border-left: 5px solid #28a745; /* Borda verde para destaque */
+}
+
+#orderListContainer li div {
+    margin-bottom: 0.5rem;
+}
+
+#orderListContainer li strong {
+    color: #1B263B; /* Azul escuro para destaques */
+}
+
+#orderListContainer label {
+    display: flex;
+    align-items: center;
+    margin-top: 0.5rem;
+    cursor: pointer;
+}
+
+#orderListContainer input[type="checkbox"] {
+    margin-right: 0.5rem;
+    transform: scale(1.2); /* Checkbox um pouco maior */
+}
+
+/* Classes de Visibilidade para Seções */
+.hidden-section {
+    display: none;
+}
+
+.active-section {
+    display: block;
+}
+
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    margin-top: 2rem;
+    background-color: #0D1B2A; /* Mesmo azul escuro do header */
+    color: #E0E1DD;
+    font-size: 0.9rem;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 1.8rem;
+    }
+
+    nav button {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+        margin: 0.3rem;
+    }
+
+    main {
+        margin: 10px;
+        padding: 0.8rem;
+    }
+
+    #orderForm input[type="text"],
+    #orderForm input[type="number"],
+    #orderForm textarea {
+        font-size: 0.95rem;
+    }
+
+    #orderForm button[type="submit"] {
+        width: 100%;
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    header h1 {
+        font-size: 1.5rem;
+    }
+    nav {
+        display: flex;
+        flex-direction: column;
+    }
+    nav button {
+        width: calc(100% - 1rem);
+        margin: 0.5rem auto;
+    }
+
+    #orderListContainer li {
+        padding: 0.8rem;
+    }
+}
+

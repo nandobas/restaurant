@@ -2,7 +2,7 @@
 let db;
 const DB_NAME = "restaurantManagerDB";
 const TABLE_STORE_NAME = "tables";
-const DB_VERSION = 3; // <<-- Versão 3 do DB
+const DB_VERSION = 4; // <<-- Versão 4 do DB (isOpen agora é Number 1/0)
 
 // Elementos do DOM
 const formSection = document.getElementById("formSection");
@@ -94,7 +94,8 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             db = event.target.result;
             const transaction = event.target.transaction;
-            console.log(`Iniciando onupgradeneeded de v${event.oldVersion || 0} para v${event.newVersion}`);
+            const oldVersion = event.oldVersion;
+            console.log(`Iniciando onupgradeneeded de v${oldVersion || 0} para v${event.newVersion}`);
             try {
                 let tableStore;
                 if (!db.objectStoreNames.contains(TABLE_STORE_NAME)) {
@@ -103,10 +104,8 @@ function initDB() {
                 } else {
                     console.log(`Object store ${TABLE_STORE_NAME} já existe.`);
                     tableStore = transaction.objectStore(TABLE_STORE_NAME);
-                    // Adicionar verificação de keyPath se necessário
                     if (tableStore.keyPath !== "sessionId") {
                          console.warn(`Object store ${TABLE_STORE_NAME} existe mas keyPath não é sessionId. Recriando...`);
-                         // Poderia tentar migrar, mas recriar é mais simples para este exemplo
                          db.deleteObjectStore(TABLE_STORE_NAME);
                          tableStore = db.createObjectStore(TABLE_STORE_NAME, { keyPath: "sessionId" });
                          console.log(`Object store ${TABLE_STORE_NAME} recriado com keyPath: sessionId`);
@@ -117,15 +116,44 @@ function initDB() {
                 if (!tableStore.indexNames.contains("isOpenIndex")) {
                      tableStore.createIndex("isOpenIndex", "isOpen", { unique: false });
                      console.log("Índice isOpenIndex criado.");
+                 } else {
+                     console.log("Índice isOpenIndex já existe.");
                  }
                  if (!tableStore.indexNames.contains("tableNumberIndex")) {
                      tableStore.createIndex("tableNumberIndex", "tableNumber", { unique: false });
                      console.log("Índice tableNumberIndex criado.");
+                 } else {
+                     console.log("Índice tableNumberIndex já existe.");
                  }
                  if (!tableStore.indexNames.contains("closedAtIndex")) {
                      tableStore.createIndex("closedAtIndex", "closedAt", { unique: false }); 
                      console.log("Índice closedAtIndex criado.");
+                 } else {
+                     console.log("Índice closedAtIndex já existe.");
                  }
+
+                // *** MIGRAÇÃO DE DADOS (isOpen: boolean -> number) ***
+                if (oldVersion < 4) {
+                    console.log("Migrando dados de isOpen (boolean para number 1/0)...");
+                    tableStore.openCursor().onsuccess = (cursorEvent) => {
+                        const cursor = cursorEvent.target.result;
+                        if (cursor) {
+                            const record = cursor.value;
+                            let needsUpdate = false;
+                            if (typeof record.isOpen === 'boolean') {
+                                record.isOpen = record.isOpen ? 1 : 0;
+                                needsUpdate = true;
+                                console.log(`Registro ${record.sessionId}: isOpen convertido para ${record.isOpen}`);
+                            }
+                            if (needsUpdate) {
+                                cursor.update(record);
+                            }
+                            cursor.continue();
+                        } else {
+                            console.log("Migração de isOpen concluída.");
+                        }
+                    };
+                }
 
                  console.log("onupgradeneeded concluído com sucesso.");
             } catch (error) {
@@ -152,7 +180,7 @@ function initDB() {
     });
 }
 
-// --- Funções CRUD Atualizadas --- 
+// --- Funções CRUD Atualizadas (isOpen é 1 ou 0) --- 
 
 async function getTableBySessionId(sessionId) {
     if (storageType === "indexedDB" && db) {
@@ -175,6 +203,8 @@ async function getTableBySessionId(sessionId) {
 }
 
 async function addTable(tableData) {
+     // Garante que isOpen seja 1 ou 0
+     tableData.isOpen = (tableData.isOpen === true || tableData.isOpen === 1) ? 1 : 0;
      if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
@@ -198,6 +228,8 @@ async function addTable(tableData) {
 }
 
 async function updateTable(tableData) {
+    // Garante que isOpen seja 1 ou 0
+    tableData.isOpen = (tableData.isOpen === true || tableData.isOpen === 1) ? 1 : 0;
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
@@ -226,7 +258,7 @@ async function updateTable(tableData) {
 }
 
 async function findOpenTableByNumber(tableNumber) {
-    console.log(`Procurando mesa ABERTA número ${tableNumber}`);
+    console.log(`Procurando mesa ABERTA (isOpen=1) número ${tableNumber}`);
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
@@ -238,8 +270,9 @@ async function findOpenTableByNumber(tableNumber) {
                 request.onsuccess = () => {
                     const tablesWithNumber = request.result;
                     console.log(`Mesas encontradas com número ${tableNumber}:`, tablesWithNumber);
-                    const openTable = tablesWithNumber.find(table => table.isOpen === true);
-                    console.log(`Mesa aberta encontrada:`, openTable);
+                    // Filtra por isOpen === 1
+                    const openTable = tablesWithNumber.find(table => table.isOpen === 1);
+                    console.log(`Mesa aberta (isOpen=1) encontrada:`, openTable);
                     resolve(openTable); 
                 };
                 request.onerror = (event) => reject(event.target.error);
@@ -249,26 +282,27 @@ async function findOpenTableByNumber(tableNumber) {
     } else {
         return new Promise((resolve) => {
             const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
-            resolve(tables.find(t => t.tableNumber === tableNumber && t.isOpen));
+            resolve(tables.find(t => t.tableNumber === tableNumber && t.isOpen === 1));
         });
     }
 }
 
 async function getOpenTables() {
-    console.log(`Chamando getOpenTables com storageType: ${storageType}`);
+    console.log(`Chamando getOpenTables (filtrando por isOpen=1) com storageType: ${storageType}`);
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
                 const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
                 const index = store.index("isOpenIndex");
-                const request = index.getAll(IDBKeyRange.only(true)); 
+                // Usa IDBKeyRange.only(1) para buscar mesas abertas
+                const request = index.getAll(IDBKeyRange.only(1)); 
                 request.onsuccess = () => {
-                    console.log("Sucesso no request getAll(true) para getOpenTables. Resultado:", request.result);
+                    console.log("Sucesso no request getAll(1) para getOpenTables. Resultado:", request.result);
                     resolve(request.result);
                 };
                 request.onerror = (event) => {
-                    console.error("Erro no request getAll(true) em getOpenTables:", event.target.error);
+                    console.error("Erro no request getAll(1) em getOpenTables:", event.target.error);
                     reject(event.target.error);
                 };
                 transaction.onerror = (event) => {
@@ -284,27 +318,28 @@ async function getOpenTables() {
         console.log("Usando fallback LocalStorage para getOpenTables");
         return new Promise((resolve) => {
             const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
-            resolve(tables.filter(t => t.isOpen));
+            resolve(tables.filter(t => t.isOpen === 1));
         });
     }
 }
 
 async function getClosedTables() {
-    console.log(`Chamando getClosedTables com storageType: ${storageType}`);
+    console.log(`Chamando getClosedTables (filtrando por isOpen=0) com storageType: ${storageType}`);
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
                 const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
                 const index = store.index("isOpenIndex");
-                const request = index.getAll(IDBKeyRange.only(false)); 
+                 // Usa IDBKeyRange.only(0) para buscar mesas fechadas
+                const request = index.getAll(IDBKeyRange.only(0)); 
                 request.onsuccess = () => {
-                    console.log("Sucesso no request getAll(false) para getClosedTables. Resultado:", request.result);
+                    console.log("Sucesso no request getAll(0) para getClosedTables. Resultado:", request.result);
                     const sortedResult = request.result.sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
                     resolve(sortedResult);
                 };
                 request.onerror = (event) => {
-                    console.error("Erro no request getAll(false) em getClosedTables:", event.target.error);
+                    console.error("Erro no request getAll(0) em getClosedTables:", event.target.error);
                     reject(event.target.error);
                 };
                 transaction.onerror = (event) => {
@@ -320,14 +355,14 @@ async function getClosedTables() {
         console.log("Usando fallback LocalStorage para getClosedTables");
         return new Promise((resolve) => {
             const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
-            const closed = tables.filter(t => !t.isOpen);
+            const closed = tables.filter(t => t.isOpen === 0);
             closed.sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
             resolve(closed);
         });
     }
 }
 
-// *** NOVA FUNÇÃO PARA EXPORTAR DADOS ***
+// Função para exportar dados (mantida para debug)
 async function exportAllData() {
     console.log("--- INÍCIO DA EXPORTAÇÃO DE DADOS ---");
     if (storageType === "indexedDB" && db) {
@@ -398,92 +433,87 @@ if (orderForm) {
 
         console.log(`Tentando adicionar pedido à mesa número ${tableNumber}`);
         try {
-            // Verifica se já existe uma mesa ABERTA com este número
             let openTable = await findOpenTableByNumber(tableNumber);
             
             const newOrder = {
-                orderId: Date.now(), // ID único para o pedido dentro da mesa
+                orderId: Date.now(), 
                 details: orderDetails,
                 attended: false,
                 timestamp: new Date().toISOString()
             };
 
             if (openTable) {
-                // Mesa aberta encontrada: Adiciona pedido a ela
                 console.log(`Mesa aberta ${tableNumber} (sessionId: ${openTable.sessionId}) encontrada. Adicionando pedido.`);
                 if (!openTable.orders) openTable.orders = [];
                 openTable.orders.push(newOrder);
-                // Atualiza nome/quarto se estiverem vazios e foram preenchidos agora
                 if (!openTable.clientName && clientName) openTable.clientName = clientName;
                 if (!openTable.roomNumber && roomNumber) openTable.roomNumber = roomNumber;
                 await updateTable(openTable);
                 console.log(`Pedido adicionado à mesa ${tableNumber}. Tabela atualizada.`);
             } else {
-                // Nenhuma mesa aberta com este número: Cria uma NOVA instância de mesa
                 console.log(`Nenhuma mesa aberta com número ${tableNumber}. Criando nova instância.`);
                 if (!clientName) {
                      alert("Nome do Cliente é obrigatório ao abrir uma nova mesa.");
                      return;
                 }
-                const newTableSessionId = `table-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // ID único
+                const newTableSessionId = `table-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
                 const newTable = {
                     sessionId: newTableSessionId,
                     tableNumber: tableNumber,
                     clientName: clientName,
                     roomNumber: roomNumber || null,
                     orders: [newOrder],
-                    isOpen: true, 
+                    isOpen: 1, // <-- Usa 1 para aberto
                     openedAt: new Date().toISOString(),
-                    closedAt: null // Importante iniciar como null
+                    closedAt: null
                 };
                 await addTable(newTable);
                 console.log(`Nova instância de mesa ${tableNumber} (sessionId: ${newTableSessionId}) criada com o primeiro pedido.`);
             }
 
             orderForm.reset();
-            // Correção: Limpar campos que só são para nova mesa
             clientNameInput.value = ""; 
             roomNumberInput.value = ""; 
 
             console.log("Pedido processado. Chamando showList() para atualizar a visualização...");
-            showList(); // Mudar para a lista ANTES de qualquer alert ou notificação
-
-            // REMOVIDO: alert("Pedido adicionado com sucesso!"); // Remover alert para não bloquear
+            showList(); 
 
         } catch (error) {
             console.error("Falha ao adicionar pedido/mesa:", error);
             alert("Erro ao processar pedido. Verifique o console.");
         }
     });
-    console.log("Listener de submit (v3.1) adicionado ao formulário.");
+    console.log("Listener de submit (v3.2 - isOpen=1/0) adicionado ao formulário.");
 } else {
     console.error("Erro: Formulário orderForm não encontrado.");
 }
 
 // Carrega e renderiza mesas ABERTAS (LÓGICA REAL RESTAURADA)
 async function loadTables() {
-    console.log("Chamando loadTables (v3.1 - LÓGICA REAL)");
+    console.log("Chamando loadTables (v3.2 - isOpen=1/0)");
     if (!tableListContainer) {
         console.error("Erro: tableListContainer não encontrado em loadTables.");
         return;
     }
     tableListContainer.innerHTML = "<p>Carregando mesas abertas...</p>"; 
     try {
-        const openTables = await getOpenTables();
-        console.log("Mesas abertas recebidas em loadTables:", openTables);
+        const openTables = await getOpenTables(); // Deve retornar apenas isOpen=1
+        console.log("Mesas abertas (isOpen=1) recebidas em loadTables:", openTables);
         renderTables(openTables);
     } catch (error) {
         console.error("Falha detalhada ao carregar/renderizar mesas abertas:", error);
+        let errorMsg = "Erro ao carregar as mesas abertas.";
         if (error instanceof Error) {
              console.error("Stack trace:", error.stack);
+             errorMsg += ` Detalhes: ${error.name} - ${error.message}`;
         }
-        tableListContainer.innerHTML = "<p>Erro ao carregar as mesas abertas. Verifique o console para detalhes.</p>";
+        tableListContainer.innerHTML = `<p style="color: red;">${errorMsg} Verifique o console.</p>`;
     }
 }
 
 // Renderiza mesas ABERTAS
 function renderTables(tables) {
-    console.log("Iniciando renderTables (v3.1) com:", tables);
+    console.log("Iniciando renderTables (v3.2) com:", tables);
      if (!tableListContainer) {
         console.error("Erro: tableListContainer não encontrado em renderTables.");
         return;
@@ -498,7 +528,6 @@ function renderTables(tables) {
 
     const ul = document.createElement("ul");
     ul.className = 'table-list';
-    // Ordena por número da mesa, depois por data de abertura (mais antiga primeiro)
     tables.sort((a, b) => {
         if (a.tableNumber !== b.tableNumber) {
             return a.tableNumber - b.tableNumber;
@@ -508,28 +537,28 @@ function renderTables(tables) {
 
     tables.forEach(table => {
         // *** DATA INTEGRITY CHECK ***
-        if (!table || typeof table !== 'object' || !table.sessionId || typeof table.isOpen !== 'boolean') {
-            console.warn("Registro de mesa inválido encontrado e ignorado:", table);
-            return; // Pula este registro inválido
+        if (!table || typeof table !== 'object' || !table.sessionId || typeof table.isOpen !== 'number') { // Verifica se isOpen é number
+            console.warn("Registro de mesa inválido encontrado e ignorado (v3.2 check):", table);
+            return; 
         }
 
-        // Só renderiza se for aberta (dupla verificação)
-        if (!table.isOpen) return;
+        // Só renderiza se for aberta (isOpen === 1)
+        if (table.isOpen !== 1) return;
 
         console.log(`Renderizando mesa aberta ${table.tableNumber} (sessionId: ${table.sessionId})`);
         const li = document.createElement("li");
         li.className = 'table-item';
-        li.dataset.sessionId = table.sessionId; // Usa sessionId no dataset
+        li.dataset.sessionId = table.sessionId; 
 
-        let ordersHtml = '';
-        if (table.orders && Array.isArray(table.orders) && table.orders.length > 0) { // Verifica se é array
+        let ordersHtml = 
+            '<ul class="order-list"><li class="order-item">Nenhum pedido nesta mesa ainda.</li></ul>';
+        if (table.orders && Array.isArray(table.orders) && table.orders.length > 0) {
              ordersHtml = '<ul class="order-list">';
              table.orders.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
              ordersHtml += table.orders.map(order => {
-                 // *** ORDER INTEGRITY CHECK ***
                  if (!order || typeof order !== 'object' || !order.orderId || typeof order.attended !== 'boolean') {
                      console.warn(`Pedido inválido ignorado na mesa ${table.sessionId}:`, order);
-                     return ''; // Retorna string vazia para pedido inválido
+                     return ''; 
                  }
                  return `
                     <li class="order-item ${order.attended ? 'attended' : ''}" data-order-id="${order.orderId}">
@@ -542,9 +571,7 @@ function renderTables(tables) {
                 `;
              }).join('');
              ordersHtml += '</ul>';
-        } else {
-            ordersHtml = '<ul class="order-list"><li class="order-item">Nenhum pedido nesta mesa ainda.</li></ul>';
-        }
+        } 
 
         li.innerHTML = `
             <div class="table-header">
@@ -569,14 +596,14 @@ function renderTables(tables) {
                     try {
                         console.log(`Tentando fechar mesa com sessionId: ${sessionIdToClose}`);
                         let tableToClose = await getTableBySessionId(sessionIdToClose);
-                        if (tableToClose && tableToClose.isOpen) {
-                            tableToClose.isOpen = false;
-                            tableToClose.closedAt = new Date().toISOString(); // Marca data de fechamento
+                        if (tableToClose && tableToClose.isOpen === 1) { // Verifica se isOpen é 1
+                            tableToClose.isOpen = 0; // <-- Usa 0 para fechado
+                            tableToClose.closedAt = new Date().toISOString();
                             await updateTable(tableToClose);
-                            console.log(`Mesa (sessionId: ${sessionIdToClose}) marcada como fechada no DB.`);
-                            loadTables(); // Recarrega a lista de mesas ABERTAS
+                            console.log(`Mesa (sessionId: ${sessionIdToClose}) marcada como fechada (isOpen=0) no DB.`);
+                            loadTables(); 
                         } else {
-                             console.error(`Mesa ${sessionIdToClose} não encontrada ou já fechada.`);
+                             console.error(`Mesa ${sessionIdToClose} não encontrada ou já fechada (isOpen não é 1).`);
                              alert("Erro: Mesa não encontrada ou já está fechada.");
                         }
                     } catch (error) {
@@ -625,20 +652,20 @@ function renderTables(tables) {
         ul.appendChild(li);
     });
     tableListContainer.appendChild(ul);
-    console.log("RenderTables (v3.1) concluído.");
+    console.log("RenderTables (v3.2) concluído.");
 }
 
 // Carrega e renderiza mesas FECHADAS (Histórico)
 async function loadHistory() {
-    console.log("Chamando loadHistory (v3.1)");
+    console.log("Chamando loadHistory (v3.2 - isOpen=1/0)");
     if (!historyListContainer) {
         console.error("Erro: historyListContainer não encontrado em loadHistory.");
         return;
     }
     historyListContainer.innerHTML = "<p>Carregando histórico...</p>"; 
     try {
-        const closedTables = await getClosedTables();
-        console.log("Mesas fechadas recebidas em loadHistory:", closedTables);
+        const closedTables = await getClosedTables(); // Deve retornar apenas isOpen=0
+        console.log("Mesas fechadas (isOpen=0) recebidas em loadHistory:", closedTables);
         renderHistory(closedTables);
     } catch (error) {
         console.error("Falha ao carregar histórico de mesas:", error);
@@ -648,7 +675,7 @@ async function loadHistory() {
 
 // Renderiza mesas FECHADAS (Histórico)
 function renderHistory(tables) {
-    console.log("Iniciando renderHistory (v3.1) com:", tables);
+    console.log("Iniciando renderHistory (v3.2) com:", tables);
      if (!historyListContainer) {
         console.error("Erro: historyListContainer não encontrado em renderHistory.");
         return;
@@ -662,14 +689,14 @@ function renderHistory(tables) {
     }
 
     const ul = document.createElement("ul");
-    ul.className = 'history-list'; // Classe diferente para estilização
+    ul.className = 'history-list'; 
     // Já vem ordenado por closedAt mais recente de getClosedTables
 
     tables.forEach(table => {
          // *** DATA INTEGRITY CHECK ***
-        if (!table || typeof table !== 'object' || !table.sessionId || typeof table.isOpen === 'boolean' && table.isOpen) {
-            console.warn("Registro de histórico inválido encontrado e ignorado:", table);
-            return; // Pula este registro inválido
+        if (!table || typeof table !== 'object' || !table.sessionId || typeof table.isOpen !== 'number' || table.isOpen !== 0) { // Verifica se isOpen é 0
+            console.warn("Registro de histórico inválido encontrado e ignorado (v3.2 check):", table);
+            return; 
         }
 
         console.log(`Renderizando histórico da mesa ${table.tableNumber} (sessionId: ${table.sessionId})`);
@@ -677,7 +704,6 @@ function renderHistory(tables) {
         li.className = 'history-item';
         li.dataset.sessionId = table.sessionId;
 
-        // Simplificar exibição de pedidos no histórico (opcional)
         let ordersSummary = 'Nenhum pedido registrado.';
         if (table.orders && Array.isArray(table.orders) && table.orders.length > 0) {
             ordersSummary = `${table.orders.length} pedido(s) registrado(s).`;
@@ -698,19 +724,18 @@ function renderHistory(tables) {
         ul.appendChild(li);
     });
     historyListContainer.appendChild(ul);
-    console.log("RenderHistory (v3.1) concluído.");
+    console.log("RenderHistory (v3.2) concluído.");
 }
 
 
 // --- Inicialização da Aplicação ---
 async function initializeApp() {
-    console.log("Iniciando initializeApp (v3.1)");
+    console.log("Iniciando initializeApp (v3.2 - isOpen=1/0)");
     try {
         storageType = await initDB();
         console.log(`Storage type definido como: ${storageType}`);
-        // Define a aba do formulário como padrão inicial
         showForm(); 
-        console.log("initializeApp (v3.1) concluído.");
+        console.log("initializeApp (v3.2) concluído.");
     } catch (error) {
         console.error("Erro fatal durante initializeApp:", error);
         alert("Ocorreu um erro crítico ao inicializar a aplicação. Verifique o console.");

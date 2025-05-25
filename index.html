@@ -12,13 +12,15 @@
         <nav>
             <button id="btnShowForm">Adicionar Pedido à Mesa</button>
             <button id="btnShowList">Ver Mesas Abertas</button>
+            <button id="btnShowHistory">Histórico de Mesas</button> <!-- Novo Botão -->
         </nav>
     </header>
 
     <main>
+        <!-- Seção do Formulário (sem alterações) -->
         <section id="formSection" class="active-section">
             <h2>Adicionar Pedido à Mesa</h2>
-            <p>Informe o número da mesa. Se a mesa não existir ou estiver fechada, uma nova será aberta com este pedido.</p>
+            <p>Informe o número da mesa. Se não houver mesa aberta com este número, uma nova será criada.</p>
             <form id="orderForm">
                 <div>
                     <label for="tableNumber">Número da Mesa:</label>
@@ -41,10 +43,19 @@
             </form>
         </section>
 
+        <!-- Seção de Mesas Abertas (sem alterações estruturais) -->
         <section id="listSection" class="hidden-section">
             <h2>Mesas Abertas</h2>
             <div id="tableListContainer">
                 <!-- Mesas abertas serão inseridas aqui via JavaScript -->
+            </div>
+        </section>
+
+        <!-- Nova Seção de Histórico -->
+        <section id="historySection" class="hidden-section">
+            <h2>Histórico de Mesas Fechadas</h2>
+            <div id="historyListContainer">
+                <!-- Histórico de mesas fechadas será inserido aqui via JavaScript -->
             </div>
         </section>
     </main>
@@ -56,3 +67,4 @@
     <script src="js/script.js"></script>
 </body>
 </html>
+

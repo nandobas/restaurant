@@ -299,3 +299,81 @@ footer {
     }
 }
 
+
+
+
+/* Estilos da Seção de Histórico */
+#historyListContainer .history-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.history-item {
+    background-color: #f8f9fa; /* Cinza muito claro, diferente das mesas abertas */
+    border: 1px solid #dee2e6; /* Borda cinza clara */
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.history-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.history-header h3 {
+    margin: 0 0 0.5rem 0;
+    color: #495057; /* Cinza mais escuro */
+    flex-basis: 100%;
+    font-size: 1.1rem;
+}
+
+.history-header span {
+    font-size: 0.9rem;
+    color: #6c757d; /* Cinza */
+    margin-right: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.history-details {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.history-details span {
+    display: block; /* Cada info em uma linha */
+    margin-bottom: 0.3rem;
+}
+
+.history-details p {
+    margin-top: 0.8rem;
+    margin-bottom: 0;
+}
+
+.history-details strong {
+    color: #343a40;
+}
+
+/* Ajustes de Responsividade para Histórico */
+@media (max-width: 768px) {
+    .history-header span {
+        flex-basis: 48%;
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .history-header span {
+        flex-basis: 100%;
+    }
+    .history-item {
+        padding: 1rem;
+    }
+}
+

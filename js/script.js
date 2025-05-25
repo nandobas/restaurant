@@ -2,15 +2,18 @@
 let db;
 const DB_NAME = "restaurantManagerDB";
 const TABLE_STORE_NAME = "tables";
-const DB_VERSION = 2;
+const DB_VERSION = 3; // <<-- Versão 3 do DB
 
 // Elementos do DOM
 const formSection = document.getElementById("formSection");
 const listSection = document.getElementById("listSection");
+const historySection = document.getElementById("historySection"); 
 const btnShowForm = document.getElementById("btnShowForm");
 const btnShowList = document.getElementById("btnShowList");
+const btnShowHistory = document.getElementById("btnShowHistory"); 
 const orderForm = document.getElementById("orderForm");
 const tableListContainer = document.getElementById("tableListContainer");
+const historyListContainer = document.getElementById("historyListContainer"); 
 
 // Inputs do formulário
 const tableNumberInput = document.getElementById("tableNumber");
@@ -21,43 +24,60 @@ const orderDetailsInput = document.getElementById("orderDetails");
 // Funções de Navegação entre Telas
 function showForm() {
     console.log("Chamando showForm");
-    if (formSection && listSection) {
+    if (formSection && listSection && historySection) {
         formSection.classList.add("active-section");
         formSection.classList.remove("hidden-section");
         listSection.classList.add("hidden-section");
         listSection.classList.remove("active-section");
-        console.log("Classes aplicadas em showForm");
+        historySection.classList.add("hidden-section");
+        historySection.classList.remove("active-section");
     } else {
-        console.error("Erro: formSection ou listSection não encontrados em showForm");
+        console.error("Erro: Alguma seção não encontrada em showForm");
     }
 }
 
 function showList() {
     console.log("Chamando showList");
-    if (formSection && listSection) {
-        console.log("Aplicando classes para mostrar lista...");
+    if (formSection && listSection && historySection) {
         listSection.classList.add("active-section");
         listSection.classList.remove("hidden-section");
         formSection.classList.add("hidden-section");
         formSection.classList.remove("active-section");
-        console.log("Classes aplicadas em showList. Chamando loadTables...");
-        loadTables(); // Carrega as mesas ao mostrar a lista
+        historySection.classList.add("hidden-section");
+        historySection.classList.remove("active-section");
+        loadTables(); // Carrega as mesas ABERTAS
     } else {
-         console.error("Erro: formSection ou listSection não encontrados em showList");
+         console.error("Erro: Alguma seção não encontrada em showList");
+    }
+}
+
+function showHistory() {
+    console.log("Chamando showHistory");
+    if (formSection && listSection && historySection) {
+        historySection.classList.add("active-section");
+        historySection.classList.remove("hidden-section");
+        formSection.classList.add("hidden-section");
+        formSection.classList.remove("active-section");
+        listSection.classList.add("hidden-section");
+        listSection.classList.remove("active-section");
+        loadHistory(); // Carrega as mesas FECHADAS
+    } else {
+         console.error("Erro: Alguma seção não encontrada em showHistory");
     }
 }
 
 // Inicialização - Adiciona Event Listeners aos botões de navegação
-if (btnShowForm && btnShowList) {
+if (btnShowForm && btnShowList && btnShowHistory) {
     btnShowForm.addEventListener("click", showForm);
     btnShowList.addEventListener("click", showList);
+    btnShowHistory.addEventListener("click", showHistory); 
     console.log("Listeners de navegação adicionados.");
 } else {
      console.error("Erro: Botões de navegação não encontrados.");
 }
 
 
-// --- Lógica de Persistência de Dados ---
+// --- Lógica de Persistência de Dados (IndexedDB com fallback para LocalStorage) ---
 
 let storageType = "localStorage";
 
@@ -73,34 +93,44 @@ function initDB() {
 
         request.onupgradeneeded = (event) => {
             db = event.target.result;
-            console.log(`Iniciando onupgradeneeded para versão ${DB_VERSION}`);
+            const transaction = event.target.transaction;
+            console.log(`Iniciando onupgradeneeded de v${event.oldVersion || 0} para v${event.newVersion}`);
             try {
                 let tableStore;
                 if (!db.objectStoreNames.contains(TABLE_STORE_NAME)) {
-                    console.log(`Criando object store ${TABLE_STORE_NAME}`);
-                    tableStore = db.createObjectStore(TABLE_STORE_NAME, { keyPath: "id" });
+                    console.log(`Criando object store ${TABLE_STORE_NAME} com keyPath: sessionId`);
+                    tableStore = db.createObjectStore(TABLE_STORE_NAME, { keyPath: "sessionId" }); 
                 } else {
                     console.log(`Object store ${TABLE_STORE_NAME} já existe.`);
-                    const transaction = event.target.transaction; 
                     tableStore = transaction.objectStore(TABLE_STORE_NAME);
+                    // Adicionar verificação de keyPath se necessário
+                    if (tableStore.keyPath !== "sessionId") {
+                         console.warn(`Object store ${TABLE_STORE_NAME} existe mas keyPath não é sessionId. Recriando...`);
+                         // Poderia tentar migrar, mas recriar é mais simples para este exemplo
+                         db.deleteObjectStore(TABLE_STORE_NAME);
+                         tableStore = db.createObjectStore(TABLE_STORE_NAME, { keyPath: "sessionId" });
+                         console.log(`Object store ${TABLE_STORE_NAME} recriado com keyPath: sessionId`);
+                    }
                 }
-                // Garante que o índice exista
+
+                // Garantir que os índices necessários existam
                 if (!tableStore.indexNames.contains("isOpenIndex")) {
-                     console.log(`Criando índice isOpenIndex em ${TABLE_STORE_NAME}.`);
                      tableStore.createIndex("isOpenIndex", "isOpen", { unique: false });
                      console.log("Índice isOpenIndex criado.");
-                 } else {
-                     console.log("Índice isOpenIndex já existe.");
                  }
-                 // Remover stores antigos
-                 if (db.objectStoreNames.contains("orders")) {
-                     console.log("Removendo object store antigo 'orders'.");
-                     db.deleteObjectStore("orders");
-                     console.log("Object store 'orders' removido.");
+                 if (!tableStore.indexNames.contains("tableNumberIndex")) {
+                     tableStore.createIndex("tableNumberIndex", "tableNumber", { unique: false });
+                     console.log("Índice tableNumberIndex criado.");
                  }
+                 if (!tableStore.indexNames.contains("closedAtIndex")) {
+                     tableStore.createIndex("closedAtIndex", "closedAt", { unique: false }); 
+                     console.log("Índice closedAtIndex criado.");
+                 }
+
                  console.log("onupgradeneeded concluído com sucesso.");
             } catch (error) {
                 console.error("Erro durante onupgradeneeded:", error);
+                transaction.abort(); 
                 reject(error);
             }
         };
@@ -109,7 +139,7 @@ function initDB() {
             db = event.target.result;
             console.log("IndexedDB inicializado com sucesso (onsuccess).");
             db.onerror = (event) => {
-                 console.error(`Erro no banco de dados: ${event.target.errorCode}`);
+                 console.error(`Erro no banco de dados: ${event.target.error || event.target.errorCode}`);
             };
             resolve("indexedDB");
         };
@@ -122,15 +152,15 @@ function initDB() {
     });
 }
 
-// --- Funções CRUD --- 
+// --- Funções CRUD Atualizadas --- 
 
-async function getTable(tableId) {
+async function getTableBySessionId(sessionId) {
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
                 const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
-                const request = store.get(tableId);
+                const request = store.get(sessionId);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = (event) => reject(event.target.error);
                 transaction.onerror = (event) => reject(event.target.error);
@@ -139,7 +169,7 @@ async function getTable(tableId) {
     } else {
         return new Promise((resolve) => {
             const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
-            resolve(tables.find(t => t.id === tableId));
+            resolve(tables.find(t => t.sessionId === sessionId)); 
         });
     }
 }
@@ -150,9 +180,9 @@ async function addTable(tableData) {
             try {
                 const transaction = db.transaction([TABLE_STORE_NAME], "readwrite");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
-                console.log("Adicionando tabela ao DB:", tableData);
+                console.log("Adicionando nova mesa ao DB:", tableData);
                 const request = store.add(tableData);
-                request.onsuccess = () => resolve(request.result);
+                request.onsuccess = () => resolve(request.result); // Retorna a sessionId
                 request.onerror = (event) => reject(event.target.error);
                 transaction.onerror = (event) => reject(event.target.error);
             } catch (error) { reject(error); }
@@ -162,7 +192,7 @@ async function addTable(tableData) {
             const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
             tables.push(tableData);
             localStorage.setItem(TABLE_STORE_NAME, JSON.stringify(tables));
-            resolve(tableData.id);
+            resolve(tableData.sessionId);
         });
     }
 }
@@ -173,7 +203,7 @@ async function updateTable(tableData) {
             try {
                 const transaction = db.transaction([TABLE_STORE_NAME], "readwrite");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
-                 console.log("Atualizando tabela no DB:", tableData);
+                 console.log("Atualizando tabela no DB (sessionId: " + tableData.sessionId + "):", tableData);
                 const request = store.put(tableData);
                 request.onsuccess = () => resolve();
                 request.onerror = (event) => reject(event.target.error);
@@ -183,14 +213,43 @@ async function updateTable(tableData) {
     } else {
         return new Promise((resolve, reject) => {
             let tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
-            const index = tables.findIndex(t => t.id === tableData.id);
+            const index = tables.findIndex(t => t.sessionId === tableData.sessionId);
             if (index > -1) {
                 tables[index] = tableData;
                 localStorage.setItem(TABLE_STORE_NAME, JSON.stringify(tables));
                 resolve();
             } else {
-                reject("Mesa não encontrada no LocalStorage.");
+                reject("Mesa (sessionId) não encontrada no LocalStorage.");
             }
+        });
+    }
+}
+
+async function findOpenTableByNumber(tableNumber) {
+    console.log(`Procurando mesa ABERTA número ${tableNumber}`);
+    if (storageType === "indexedDB" && db) {
+        return new Promise((resolve, reject) => {
+            try {
+                const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
+                const store = transaction.objectStore(TABLE_STORE_NAME);
+                const numberIndex = store.index("tableNumberIndex");
+                const request = numberIndex.getAll(IDBKeyRange.only(tableNumber));
+
+                request.onsuccess = () => {
+                    const tablesWithNumber = request.result;
+                    console.log(`Mesas encontradas com número ${tableNumber}:`, tablesWithNumber);
+                    const openTable = tablesWithNumber.find(table => table.isOpen === true);
+                    console.log(`Mesa aberta encontrada:`, openTable);
+                    resolve(openTable); 
+                };
+                request.onerror = (event) => reject(event.target.error);
+                transaction.onerror = (event) => reject(event.target.error);
+            } catch (error) { reject(error); }
+        });
+    } else {
+        return new Promise((resolve) => {
+            const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
+            resolve(tables.find(t => t.tableNumber === tableNumber && t.isOpen));
         });
     }
 }
@@ -200,34 +259,17 @@ async function getOpenTables() {
     if (storageType === "indexedDB" && db) {
         return new Promise((resolve, reject) => {
             try {
-                console.log("Iniciando transação readonly para getOpenTables (getAll)");
                 const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
                 const store = transaction.objectStore(TABLE_STORE_NAME);
-                console.log("Executando getAll() em store");
-                const request = store.getAll(); 
-
+                const index = store.index("isOpenIndex");
+                const request = index.getAll(IDBKeyRange.only(true)); 
                 request.onsuccess = () => {
-                    console.log("Sucesso no request getAll(). Resultado bruto:", request.result);
-                    // Filtrar por isOpen aqui no JS
-                    const openTables = request.result.filter(table => table.isOpen === true);
-                    console.log("Resultado filtrado (isOpen=true):", openTables);
-                    resolve(openTables);
+                    console.log("Sucesso no request getAll(true) para getOpenTables. Resultado:", request.result);
+                    resolve(request.result);
                 };
-                request.onerror = (event) => {
-                    console.error("Erro no request getAll() para getOpenTables:", event.target.error);
-                    reject(event.target.error);
-                }
-                transaction.oncomplete = () => {
-                     console.log("Transação readonly getOpenTables (getAll) concluída.");
-                }
-                 transaction.onerror = (event) => {
-                    console.error("Erro na transação getOpenTables (getAll):", event.target.error);
-                    reject(event.target.error);
-                }
-            } catch (error) {
-                 console.error("Erro síncrono em getOpenTables (getAll):", error);
-                 reject(error);
-            }
+                request.onerror = (event) => reject(event.target.error);
+                transaction.onerror = (event) => reject(event.target.error);
+            } catch (error) { reject(error); }
         });
     } else {
         console.log("Usando fallback LocalStorage para getOpenTables");
@@ -238,17 +280,47 @@ async function getOpenTables() {
     }
 }
 
-// --- Lógica do Formulário e Lista de Mesas ---
+async function getClosedTables() {
+    console.log(`Chamando getClosedTables com storageType: ${storageType}`);
+    if (storageType === "indexedDB" && db) {
+        return new Promise((resolve, reject) => {
+            try {
+                const transaction = db.transaction([TABLE_STORE_NAME], "readonly");
+                const store = transaction.objectStore(TABLE_STORE_NAME);
+                const index = store.index("isOpenIndex");
+                const request = index.getAll(IDBKeyRange.only(false)); 
+                request.onsuccess = () => {
+                    console.log("Sucesso no request getAll(false) para getClosedTables. Resultado:", request.result);
+                    const sortedResult = request.result.sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
+                    resolve(sortedResult);
+                };
+                request.onerror = (event) => reject(event.target.error);
+                transaction.onerror = (event) => reject(event.target.error);
+            } catch (error) { reject(error); }
+        });
+    } else {
+        console.log("Usando fallback LocalStorage para getClosedTables");
+        return new Promise((resolve) => {
+            const tables = JSON.parse(localStorage.getItem(TABLE_STORE_NAME) || "[]");
+            const closed = tables.filter(t => !t.isOpen);
+            closed.sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
+            resolve(closed);
+        });
+    }
+}
+
+
+// --- Lógica do Formulário e Lista de Mesas ATUALIZADA --- 
 
 if (orderForm) {
     orderForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const tableId = parseInt(tableNumberInput.value);
+        const tableNumber = parseInt(tableNumberInput.value);
         const clientName = clientNameInput.value.trim();
         const roomNumber = roomNumberInput.value.trim();
         const orderDetails = orderDetailsInput.value.trim();
 
-        if (isNaN(tableId) || tableId <= 0) {
+        if (isNaN(tableNumber) || tableNumber <= 0) {
             alert("Número da Mesa inválido.");
             return;
         }
@@ -257,79 +329,87 @@ if (orderForm) {
             return;
         }
 
-        console.log(`Tentando adicionar pedido à mesa ${tableId}`);
+        console.log(`Tentando adicionar pedido à mesa número ${tableNumber}`);
         try {
-            let table = await getTable(tableId);
-            console.log(`Resultado getTable(${tableId}):`, table);
+            // Verifica se já existe uma mesa ABERTA com este número
+            let openTable = await findOpenTableByNumber(tableNumber);
+            
             const newOrder = {
-                orderId: Date.now(),
+                orderId: Date.now(), // ID único para o pedido dentro da mesa
                 details: orderDetails,
                 attended: false,
                 timestamp: new Date().toISOString()
             };
 
-            if (table && table.isOpen) {
-                console.log(`Mesa ${tableId} encontrada e aberta. Adicionando pedido.`);
-                if (!table.orders) table.orders = [];
-                table.orders.push(newOrder);
-                if (!table.clientName && clientName) table.clientName = clientName;
-                if (!table.roomNumber && roomNumber) table.roomNumber = roomNumber;
-                await updateTable(table);
-                console.log(`Pedido adicionado à mesa ${tableId}. Tabela atualizada.`);
+            if (openTable) {
+                // Mesa aberta encontrada: Adiciona pedido a ela
+                console.log(`Mesa aberta ${tableNumber} (sessionId: ${openTable.sessionId}) encontrada. Adicionando pedido.`);
+                if (!openTable.orders) openTable.orders = [];
+                openTable.orders.push(newOrder);
+                // Atualiza nome/quarto se estiverem vazios e foram preenchidos agora
+                if (!openTable.clientName && clientName) openTable.clientName = clientName;
+                if (!openTable.roomNumber && roomNumber) openTable.roomNumber = roomNumber;
+                await updateTable(openTable);
+                console.log(`Pedido adicionado à mesa ${tableNumber}. Tabela atualizada.`);
             } else {
-                 console.log(`Mesa ${tableId} ${table ? 'fechada' : 'não encontrada'}. Abrindo nova mesa.`);
+                // Nenhuma mesa aberta com este número: Cria uma NOVA instância de mesa
+                console.log(`Nenhuma mesa aberta com número ${tableNumber}. Criando nova instância.`);
                 if (!clientName) {
                      alert("Nome do Cliente é obrigatório ao abrir uma nova mesa.");
                      return;
                 }
+                const newTableSessionId = `table-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`; // ID único
                 const newTable = {
-                    id: tableId,
+                    sessionId: newTableSessionId,
+                    tableNumber: tableNumber,
                     clientName: clientName,
                     roomNumber: roomNumber || null,
                     orders: [newOrder],
-                    isOpen: true, // Garantir que isOpen é true
-                    openedAt: new Date().toISOString()
+                    isOpen: true, 
+                    openedAt: new Date().toISOString(),
+                    closedAt: null // Importante iniciar como null
                 };
                 await addTable(newTable);
-                console.log(`Nova mesa ${tableId} aberta com o primeiro pedido.`);
+                console.log(`Nova instância de mesa ${tableNumber} (sessionId: ${newTableSessionId}) criada com o primeiro pedido.`);
             }
 
             orderForm.reset();
-            clientNameInput.value = '';
-            roomNumberInput.value = '';
+            clientNameInput.value = ";
+            roomNumberInput.value = ";
             alert("Pedido adicionado com sucesso!");
-            showList();
+            showList(); // Mostra a lista de mesas ABERTAS atualizada
 
         } catch (error) {
             console.error("Falha ao adicionar pedido/mesa:", error);
             alert("Erro ao processar pedido. Verifique o console.");
         }
     });
-    console.log("Listener de submit adicionado ao formulário.");
+    console.log("Listener de submit (v3) adicionado ao formulário.");
 } else {
     console.error("Erro: Formulário orderForm não encontrado.");
 }
 
-
+// Carrega e renderiza mesas ABERTAS
 async function loadTables() {
-    console.log("Chamando loadTables");
+    console.log("Chamando loadTables (v3)");
     if (!tableListContainer) {
         console.error("Erro: tableListContainer não encontrado em loadTables.");
         return;
     }
-    tableListContainer.innerHTML = "<p>Carregando mesas...</p>"; // Feedback visual
+    tableListContainer.innerHTML = "<p>Carregando mesas abertas...</p>"; 
     try {
         const openTables = await getOpenTables();
         console.log("Mesas abertas recebidas em loadTables:", openTables);
         renderTables(openTables);
     } catch (error) {
-        console.error("Falha ao carregar mesas (dentro de loadTables):", error);
+        console.error("Falha ao carregar mesas abertas:", error);
         tableListContainer.innerHTML = "<p>Erro ao carregar as mesas abertas. Verifique o console.</p>";
     }
 }
 
+// Renderiza mesas ABERTAS
 function renderTables(tables) {
-    console.log("Iniciando renderTables com:", tables);
+    console.log("Iniciando renderTables (v3) com:", tables);
      if (!tableListContainer) {
         console.error("Erro: tableListContainer não encontrado em renderTables.");
         return;
@@ -344,13 +424,22 @@ function renderTables(tables) {
 
     const ul = document.createElement("ul");
     ul.className = 'table-list';
-    tables.sort((a, b) => a.id - b.id);
+    // Ordena por número da mesa, depois por data de abertura (mais antiga primeiro)
+    tables.sort((a, b) => {
+        if (a.tableNumber !== b.tableNumber) {
+            return a.tableNumber - b.tableNumber;
+        }
+        return new Date(a.openedAt) - new Date(b.openedAt);
+    });
 
     tables.forEach(table => {
-        console.log(`Renderizando mesa ${table.id}, isOpen: ${table.isOpen}`);
+        // Só renderiza se for aberta (dupla verificação)
+        if (!table.isOpen) return;
+
+        console.log(`Renderizando mesa aberta ${table.tableNumber} (sessionId: ${table.sessionId})`);
         const li = document.createElement("li");
         li.className = 'table-item';
-        li.dataset.tableId = table.id;
+        li.dataset.sessionId = table.sessionId; // Usa sessionId no dataset
 
         let ordersHtml = '';
         if (table.orders && table.orders.length > 0) {
@@ -372,10 +461,10 @@ function renderTables(tables) {
 
         li.innerHTML = `
             <div class="table-header">
-                <h3>Mesa ${table.id}</h3>
+                <h3>Mesa ${table.tableNumber}</h3>
                 <span>Cliente: ${table.clientName || 'Não informado'}</span>
                 ${table.roomNumber ? `<span>Quarto: ${table.roomNumber}</span>` : ''}
-                <span>Aberta em: ${new Date(table.openedAt || Date.now()).toLocaleString()}</span>
+                <span>Aberta em: ${new Date(table.openedAt).toLocaleString()}</span>
                 <button class="close-table-btn">Fechar Mesa</button>
             </div>
             <div class="table-orders">
@@ -384,53 +473,57 @@ function renderTables(tables) {
             </div>
         `;
 
+        // Event Listener para fechar mesa (usa sessionId)
         const closeButton = li.querySelector(".close-table-btn");
         if (closeButton) {
             closeButton.addEventListener("click", async () => {
-                if (confirm(`Tem certeza que deseja fechar a Mesa ${table.id}?`)) {
+                const sessionIdToClose = li.dataset.sessionId;
+                if (confirm(`Tem certeza que deseja fechar esta instância da Mesa ${table.tableNumber}?`)) {
                     try {
-                        console.log(`Tentando fechar mesa ${table.id}`);
-                        let tableToClose = await getTable(table.id);
-                        if (tableToClose) {
+                        console.log(`Tentando fechar mesa com sessionId: ${sessionIdToClose}`);
+                        let tableToClose = await getTableBySessionId(sessionIdToClose);
+                        if (tableToClose && tableToClose.isOpen) {
                             tableToClose.isOpen = false;
+                            tableToClose.closedAt = new Date().toISOString(); // Marca data de fechamento
                             await updateTable(tableToClose);
-                            console.log(`Mesa ${table.id} marcada como fechada no DB.`);
-                            loadTables();
+                            console.log(`Mesa (sessionId: ${sessionIdToClose}) marcada como fechada no DB.`);
+                            loadTables(); // Recarrega a lista de mesas ABERTAS
                         } else {
-                             console.error(`Mesa ${table.id} não encontrada para fechar.`);
-                             alert("Erro: Mesa não encontrada.");
+                             console.error(`Mesa ${sessionIdToClose} não encontrada ou já fechada.`);
+                             alert("Erro: Mesa não encontrada ou já está fechada.");
                         }
                     } catch (error) {
-                        console.error(`Erro ao fechar mesa ${table.id}:`, error);
+                        console.error(`Erro ao fechar mesa ${sessionIdToClose}:`, error);
                         alert("Erro ao fechar a mesa.");
                     }
                 }
             });
         } else {
-             console.error(`Botão Fechar Mesa não encontrado para mesa ${table.id}`);
+             console.error(`Botão Fechar Mesa não encontrado para mesa ${table.sessionId}`);
         }
 
+        // Event Listeners para checkboxes de pedido atendido (usa sessionId)
         const checkboxes = li.querySelectorAll(".attended-checkbox");
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener("change", async (event) => {
                 const orderItemLi = event.target.closest('.order-item');
                 const orderId = Number(orderItemLi.dataset.orderId);
                 const isAttended = event.target.checked;
-                const tableId = Number(li.dataset.tableId);
+                const tableSessionId = li.dataset.sessionId;
 
                 try {
-                    console.log(`Tentando atualizar status do pedido ${orderId} na mesa ${tableId} para ${isAttended}`);
-                    const currentTable = await getTable(tableId);
-                    if (!currentTable) throw new Error(`Mesa ${tableId} não encontrada.`);
+                    console.log(`Tentando atualizar status do pedido ${orderId} na mesa ${tableSessionId} para ${isAttended}`);
+                    const currentTable = await getTableBySessionId(tableSessionId);
+                    if (!currentTable) throw new Error(`Mesa ${tableSessionId} não encontrada.`);
                     
                     const orderIndex = currentTable.orders.findIndex(o => o.orderId === orderId);
                     if (orderIndex > -1) {
                         currentTable.orders[orderIndex].attended = isAttended;
                         await updateTable(currentTable);
                         orderItemLi.classList.toggle('attended', isAttended);
-                        console.log(`Status do pedido ${orderId} na mesa ${tableId} atualizado com sucesso.`);
+                        console.log(`Status do pedido ${orderId} na mesa ${tableSessionId} atualizado com sucesso.`);
                     } else {
-                         console.error(`Pedido ${orderId} não encontrado na mesa ${tableId}`);
+                         console.error(`Pedido ${orderId} não encontrado na mesa ${tableSessionId}`);
                          throw new Error(`Pedido ${orderId} não encontrado.`);
                     }
                 } catch (error) {
@@ -445,28 +538,92 @@ function renderTables(tables) {
         ul.appendChild(li);
     });
     tableListContainer.appendChild(ul);
-    console.log("RenderTables concluído.");
+    console.log("RenderTables (v3) concluído.");
 }
+
+// Carrega e renderiza mesas FECHADAS (Histórico)
+async function loadHistory() {
+    console.log("Chamando loadHistory (v3)");
+    if (!historyListContainer) {
+        console.error("Erro: historyListContainer não encontrado em loadHistory.");
+        return;
+    }
+    historyListContainer.innerHTML = "<p>Carregando histórico...</p>"; 
+    try {
+        const closedTables = await getClosedTables();
+        console.log("Mesas fechadas recebidas em loadHistory:", closedTables);
+        renderHistory(closedTables);
+    } catch (error) {
+        console.error("Falha ao carregar histórico de mesas:", error);
+        historyListContainer.innerHTML = "<p>Erro ao carregar o histórico. Verifique o console.</p>";
+    }
+}
+
+// Renderiza mesas FECHADAS (Histórico)
+function renderHistory(tables) {
+    console.log("Iniciando renderHistory (v3) com:", tables);
+     if (!historyListContainer) {
+        console.error("Erro: historyListContainer não encontrado em renderHistory.");
+        return;
+    }
+    historyListContainer.innerHTML = "";
+
+    if (!tables || tables.length === 0) {
+        console.log("Nenhuma mesa fechada para renderizar no histórico.");
+        historyListContainer.innerHTML = "<p>Nenhuma mesa fechada encontrada no histórico.</p>";
+        return;
+    }
+
+    const ul = document.createElement("ul");
+    ul.className = 'history-list'; // Classe diferente para estilização
+    // Já vem ordenado por closedAt mais recente de getClosedTables
+
+    tables.forEach(table => {
+        console.log(`Renderizando histórico da mesa ${table.tableNumber} (sessionId: ${table.sessionId})`);
+        const li = document.createElement("li");
+        li.className = 'history-item';
+        li.dataset.sessionId = table.sessionId;
+
+        // Simplificar exibição de pedidos no histórico (opcional)
+        let ordersSummary = 'Nenhum pedido registrado.';
+        if (table.orders && table.orders.length > 0) {
+            ordersSummary = `${table.orders.length} pedido(s) registrado(s).`;
+            // Poderia listar os detalhes se quisesse, mas pode poluir
+            /*
+            ordersSummary = '<ul class="order-summary-list">';
+            ordersSummary += table.orders.map(o => `<li>${o.details} ${o.attended ? '(Atendido)' : ''}</li>`).join('');
+            ordersSummary += '</ul>';
+            */
+        }
+
+        li.innerHTML = `
+            <div class="history-header">
+                <h3>Mesa ${table.tableNumber} (ID: ${table.sessionId.substring(0, 8)}...)</h3> 
+                <span>Cliente: ${table.clientName || 'Não informado'}</span>
+                ${table.roomNumber ? `<span>Quarto: ${table.roomNumber}</span>` : ''}
+            </div>
+            <div class="history-details">
+                 <span>Aberta em: ${new Date(table.openedAt).toLocaleString()}</span>
+                 <span>Fechada em: ${new Date(table.closedAt).toLocaleString()}</span>
+                 <p><strong>Pedidos:</strong> ${ordersSummary}</p>
+            </div>
+        `;
+        ul.appendChild(li);
+    });
+    historyListContainer.appendChild(ul);
+    console.log("RenderHistory (v3) concluído.");
+}
+
 
 // --- Inicialização da Aplicação ---
 async function initializeApp() {
-    console.log("Iniciando initializeApp");
+    console.log("Iniciando initializeApp (v3)");
     try {
         storageType = await initDB();
         console.log(`Storage type definido como: ${storageType}`);
-        // Garante que a lista seja carregada se for a aba ativa
-        if (listSection && listSection.classList.contains("active-section")) {
-            console.log("Lista de mesas ativa na inicialização, carregando mesas...");
-            await loadTables();
-        }
-        // Define a aba do formulário como padrão inicial se nenhuma estiver ativa
-        else if (formSection && !formSection.classList.contains("active-section") && listSection && !listSection.classList.contains("active-section")) {
-             console.log("Nenhuma seção ativa, mostrando formulário por padrão.");
-             showForm();
-        } else {
-            console.log("Estado inicial das seções mantido (ou elementos não encontrados).");
-        }
-         console.log("initializeApp concluído.");
+        // Define a aba do formulário como padrão inicial
+        showForm(); 
+        console.log("initializeApp (v3) concluído.");
     } catch (error) {
         console.error("Erro fatal durante initializeApp:", error);
         alert("Ocorreu um erro crítico ao inicializar a aplicação. Verifique o console.");

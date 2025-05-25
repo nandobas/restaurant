@@ -3,36 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Pedidos</title>
+    <title>Controle de Mesas e Pedidos</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <header>
-        <h1>Pedidos do Restaurante</h1>
+        <h1>Controle de Mesas do Restaurante</h1>
         <nav>
-            <button id="btnShowForm">Registrar Pedido</button>
-            <button id="btnShowList">Ver Pedidos</button>
+            <button id="btnShowForm">Adicionar Pedido à Mesa</button>
+            <button id="btnShowList">Ver Mesas Abertas</button>
         </nav>
     </header>
 
     <main>
         <section id="formSection" class="active-section">
-            <h2>Registrar Nova Mesa</h2>
+            <h2>Adicionar Pedido à Mesa</h2>
+            <p>Informe o número da mesa. Se a mesa não existir ou estiver fechada, uma nova será aberta com este pedido.</p>
             <form id="orderForm">
                 <div>
                     <label for="tableNumber">Número da Mesa:</label>
                     <input type="number" id="tableNumber" name="tableNumber" required>
                 </div>
                 <div>
-                    <label for="clientName">Nome do Cliente:</label>
-                    <input type="text" id="clientName" name="clientName" required>
+                    <label for="clientName">Nome do Cliente (para nova mesa):</label>
+                    <input type="text" id="clientName" name="clientName" placeholder="Preencher ao abrir a mesa">
                 </div>
                 <div>
-                    <label for="roomNumber">Número do Quarto (opcional):</label>
-                    <input type="number" id="roomNumber" name="roomNumber">
+                    <label for="roomNumber">Número do Quarto (opcional, para nova mesa):</label>
+                    <input type="number" id="roomNumber" name="roomNumber" placeholder="Preencher ao abrir a mesa">
                 </div>
-                <div>
-                    <label for="orderDetails">Detalhes do Pedido:</label>
+                <hr>
+                 <div>
+                    <label for="orderDetails">Detalhes do Novo Pedido:</label>
                     <textarea id="orderDetails" name="orderDetails" rows="4" required></textarea>
                 </div>
                 <button type="submit">Adicionar Pedido</button>
@@ -40,15 +42,15 @@
         </section>
 
         <section id="listSection" class="hidden-section">
-            <h2>Lista de Pedidos</h2>
-            <div id="orderListContainer">
-                <!-- Pedidos serão inseridos aqui via JavaScript -->
+            <h2>Mesas Abertas</h2>
+            <div id="tableListContainer">
+                <!-- Mesas abertas serão inseridas aqui via JavaScript -->
             </div>
         </section>
     </main>
 
     <footer>
-        <p>&copy; 2025 - Fernando Basilio</p>
+        <p>&copy; 2025 Manus Web Solutions</p>
     </footer>
 
     <script src="js/script.js"></script>

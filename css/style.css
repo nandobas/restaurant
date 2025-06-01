@@ -377,3 +377,28 @@ footer {
     }
 }
 
+#orderForm textarea::-webkit-scrollbar {
+    width: 12px; /* ou o valor desejado */
+}
+
+#orderForm textarea::-webkit-scrollbar-track {
+    background: #f1f1f1; 
+    border-radius: 10px;
+}
+
+#orderForm textarea::-webkit-scrollbar-thumb {
+    background: #888; 
+    border-radius: 10px;
+}
+
+#orderForm textarea::-webkit-scrollbar-thumb:hover {
+    background: #555; 
+}
+
+#orderForm textarea {
+    scrollbar-width: thin; /* ou auto | none */
+    scrollbar-color: #888 #f1f1f1;
+}
+#orderForm textarea {
+    height: 200px; /* ou o valor desejado */
+}

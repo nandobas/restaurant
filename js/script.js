@@ -562,7 +562,7 @@ function renderTables(tables) {
                  }
                  return `
                     <li class="order-item ${order.attended ? 'attended' : ''}" data-order-id="${order.orderId}">
-                        <span>${order.details || 'Detalhes ausentes'} (${new Date(order.timestamp).toLocaleTimeString()})</span>
+                        <span>${(order.details || 'Detalhes ausentes').replace(/\n/g, '<br>')}  (${new Date(order.timestamp).toLocaleTimeString()})</span>
                         <label>
                             <input type="checkbox" class="attended-checkbox" ${order.attended ? 'checked' : ''}>
                             Atendido
